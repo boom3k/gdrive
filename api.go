@@ -1,4 +1,4 @@
-package GoogleDrive4Go
+package googledrive4go
 
 import (
 	"context"
