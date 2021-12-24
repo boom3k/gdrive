@@ -7,7 +7,6 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -16,8 +15,8 @@ import (
 
 var ctx = context.Background()
 
-func Initialize(client *http.Client, subject string) *GoogleDrive {
-	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
+func Initialize(option *option.ClientOption, subject string) *GoogleDrive {
+	service, err := drive.NewService(ctx, *option)
 	if err != nil {
 		log.Println(err.Error())
 		panic(err)
