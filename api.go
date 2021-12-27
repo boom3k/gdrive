@@ -46,7 +46,7 @@ func (receiver *GoogleDrive) GetFileById(fileId string) *drive.File {
 		time.Sleep(time.Second * 30)
 		return receiver.GetFileById(fileId)
 	}
-	log.Printf("Returned [%s] -> \"%s\"\n, ", fileId, file.Name)
+	log.Printf("Returned [%s] -> \"%s\"\n", fileId, file.Name)
 	return file
 }
 
@@ -419,7 +419,7 @@ func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, e
 		return nil, err
 	}
 	os.WriteFile(location+file.Name, fileData, os.ModePerm)
-	log.Printf("Downloaded %s to \"%s\"\n", file.Name, location)
+	log.Printf("Downloaded %s to [%s]n", file.Name, location)
 	return os.ReadFile(location + file.Name)
 }
 
