@@ -33,6 +33,9 @@ type GoogleDrive struct {
 	Subject string
 }
 
+type LocalFile struct {
+}
+
 /*Files*/
 func (receiver *GoogleDrive) GetFileById(fileId string) *drive.File {
 	file, err := receiver.Service.Files.Get(fileId).Fields("*").Do()
@@ -402,13 +405,13 @@ func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.Read
 	return fileInfo, response.Body
 }
 
-func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, error) {
+func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, os.FileInfo, error) {
 	log.Printf("Downloading %s from Google Drive...\n", fileId)
 
 	if _, err := os.Stat(location); os.IsNotExist(err) {
 		if err := os.Mkdir(location, os.ModePerm); err != nil {
 			log.Println(err.Error())
-			return nil, err
+			return nil, nil, err
 		}
 		log.Printf("Created path [%s]\n", location)
 	}
@@ -416,11 +419,24 @@ func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, e
 	fileData, err := ioutil.ReadAll(res)
 	if err != nil {
 		log.Println(err.Error())
-		return nil, err
+		return nil, nil, err
 	}
-	os.WriteFile(location+file.Name, fileData, os.ModePerm)
+	err = os.WriteFile(location+file.Name, fileData, os.ModePerm)
+	if err != nil {
+		if err != nil {
+			log.Println(err.Error())
+			return nil, nil, err
+		}
+	}
+
 	log.Printf("Downloaded %s to [%s]\n", file.Name, location)
-	return os.ReadFile(location + file.Name)
+	fileInfo, err := os.Stat(location + file.Name)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+
+	return fileData, fileInfo, err
 }
 
 func ByteCount(b int64) string {
