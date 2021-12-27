@@ -403,6 +403,8 @@ func (receiver GoogleDrive) DownloadFileById(fileId, location string) {
 		if err := os.Mkdir(location, os.ModePerm); err != nil {
 			log.Println(err.Error())
 			panic(err)
+		} else {
+			log.Printf("Created path [%s]\n", location)
 		}
 	}
 	file, res := receiver.GetFileDataById(fileId)
