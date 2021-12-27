@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -34,10 +35,12 @@ type GoogleDrive struct {
 }
 
 type DownloadedFile struct {
-	FileInfo  os.FileInfo
-	DriveInfo *drive.File
-	FilePath  string
-	Blob      []byte
+	FileInfo      os.FileInfo
+	DriveInfo     *drive.File
+	FilePath      string
+	Blob          []byte
+	FileExtension string
+	FullFileName  string
 }
 
 /*Files*/
@@ -438,10 +441,12 @@ func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*Download
 	}
 
 	localFile := &DownloadedFile{
-		FilePath:  location + driveFile.Name,
-		FileInfo:  fileInfo,
-		Blob:      fileData,
-		DriveInfo: driveFile,
+		FullFileName:  driveFile.Name + path.Ext(driveFile.Name),
+		FilePath:      location + driveFile.Name,
+		FileInfo:      fileInfo,
+		Blob:          fileData,
+		DriveInfo:     driveFile,
+		FileExtension: path.Ext(driveFile.Name),
 	}
 
 	log.Printf("Downloaded %s to [%s]\n", driveFile.Name, location)
