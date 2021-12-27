@@ -33,7 +33,11 @@ type GoogleDrive struct {
 	Subject string
 }
 
-type LocalFile struct {
+type DownloadedFile struct {
+	FileInfo  os.FileInfo
+	DriveInfo *drive.File
+	FilePath  string
+	Blob      []byte
 }
 
 /*Files*/
@@ -405,38 +409,44 @@ func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.Read
 	return fileInfo, response.Body
 }
 
-func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, os.FileInfo, error) {
+func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*DownloadedFile, error) {
 	log.Printf("Downloading %s from Google Drive...\n", fileId)
-
-	if _, err := os.Stat(location); os.IsNotExist(err) {
-		if err := os.Mkdir(location, os.ModePerm); err != nil {
-			log.Println(err.Error())
-			return nil, nil, err
+	fileInfo, err := os.Stat(location)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(location, os.ModePerm); err != nil {
+				log.Println(err.Error())
+				return nil, err
+			}
+			log.Printf("Created path [%s]\n", location)
 		}
-		log.Printf("Created path [%s]\n", location)
 	}
-	file, res := receiver.GetFileDataById(fileId)
+
+	driveFile, res := receiver.GetFileDataById(fileId)
 	fileData, err := ioutil.ReadAll(res)
+
 	if err != nil {
 		log.Println(err.Error())
-		return nil, nil, err
+		return nil, err
 	}
-	err = os.WriteFile(location+file.Name, fileData, os.ModePerm)
+	err = os.WriteFile(location+driveFile.Name, fileData, os.ModePerm)
 	if err != nil {
 		if err != nil {
 			log.Println(err.Error())
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	log.Printf("Downloaded %s to [%s]\n", file.Name, location)
-	fileInfo, err := os.Stat(location + file.Name)
-	if err != nil {
-		log.Println(err.Error())
-		panic(err)
+	localFile := &DownloadedFile{
+		FilePath:  location + driveFile.Name,
+		FileInfo:  fileInfo,
+		Blob:      fileData,
+		DriveInfo: driveFile,
 	}
 
-	return fileData, fileInfo, err
+	log.Printf("Downloaded %s to [%s]\n", driveFile.Name, location)
+
+	return localFile, err
 }
 
 func ByteCount(b int64) string {
