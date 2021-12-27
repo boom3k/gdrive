@@ -399,6 +399,12 @@ func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.Read
 }
 
 func (receiver GoogleDrive) DownloadFileById(fileId, location string) {
+	if _, err := os.Stat(location); os.IsNotExist(err) {
+		if err := os.Mkdir(location, os.ModePerm); err != nil {
+			log.Println(err.Error())
+			panic(err)
+		}
+	}
 	file, res := receiver.GetFileDataById(fileId)
 	fileData, err := ioutil.ReadAll(res)
 	if err != nil {
