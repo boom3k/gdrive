@@ -6,6 +6,8 @@ import (
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
+	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -374,4 +376,34 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 	}
 	wg.Done()
 	return err
+}
+
+func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.ReadCloser) {
+	//Get file information
+	fileInfo := receiver.GetFileById(fileId)
+	if strings.Contains(fileInfo.MimeType, "google") {
+		fileInfo.Name = fileInfo.Name + fileInfo.FullFileExtension
+		response, err := receiver.Service.Files.Export(fileId, fileInfo.MimeType).Download()
+		if err != nil {
+			log.Println(err.Error())
+			panic(err)
+		}
+		return fileInfo, response.Body
+	}
+	response, err := receiver.Service.Files.Get(fileId).Download()
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+	return fileInfo, response.Body
+}
+
+func (receiver GoogleDrive) DownloadFileById(fileId, location string) {
+	file, res := receiver.GetFileDataById(fileId)
+	fileData, err := ioutil.ReadAll(res)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+	os.WriteFile(location+file.Name, fileData, os.ModePerm)
 }
