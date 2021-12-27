@@ -46,6 +46,7 @@ func (receiver *GoogleDrive) GetFileById(fileId string) *drive.File {
 		time.Sleep(time.Second * 30)
 		return receiver.GetFileById(fileId)
 	}
+	log.Printf("Returned [%s] -> \"%s\"\n, ", fileId, file.Name)
 	return file
 }
 
@@ -381,6 +382,7 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.ReadCloser) {
 	//Get file information
 	fileInfo := receiver.GetFileById(fileId)
+	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
 	if strings.Contains(fileInfo.MimeType, "google") {
 		fileInfo.Name = fileInfo.Name + fileInfo.FullFileExtension
 		response, err := receiver.Service.Files.Export(fileId, fileInfo.MimeType).Download()
@@ -395,23 +397,42 @@ func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.Read
 		log.Println(err.Error())
 		panic(err)
 	}
+
+	log.Printf("Retreived [%s] from Google Drive...\n", ByteCount(fileInfo.Size))
 	return fileInfo, response.Body
 }
 
-func (receiver GoogleDrive) DownloadFileById(fileId, location string) {
+func (receiver GoogleDrive) DownloadFileById(fileId, location string) ([]byte, error) {
+	log.Printf("Downloading %s from Google Drive...\n", fileId)
+
 	if _, err := os.Stat(location); os.IsNotExist(err) {
 		if err := os.Mkdir(location, os.ModePerm); err != nil {
 			log.Println(err.Error())
-			panic(err)
-		} else {
-			log.Printf("Created path [%s]\n", location)
+			return nil, err
 		}
+		log.Printf("Created path [%s]\n", location)
 	}
 	file, res := receiver.GetFileDataById(fileId)
 	fileData, err := ioutil.ReadAll(res)
 	if err != nil {
 		log.Println(err.Error())
-		panic(err)
+		return nil, err
 	}
 	os.WriteFile(location+file.Name, fileData, os.ModePerm)
+	log.Printf("Downloaded %s to \"%s\"\n", file.Name, location)
+	return os.ReadFile(location + file.Name)
+}
+
+func ByteCount(b int64) string {
+	const unit = 1000
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB",
+		float64(b)/float64(div), "kMGTPE"[exp])
 }
