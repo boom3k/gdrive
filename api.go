@@ -6,7 +6,6 @@ import (
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -389,7 +388,7 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 	return err
 }
 
-func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.ReadCloser) {
+func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte) {
 	//Get file information
 	fileInfo := receiver.GetFileById(fileId)
 	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
@@ -400,16 +399,29 @@ func (receiver GoogleDrive) GetFileDataById(fileId string) (*drive.File, io.Read
 			log.Println(err.Error())
 			panic(err)
 		}
-		return fileInfo, response.Body
+		blob, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			log.Println(err.Error())
+			panic(err)
+		}
+		log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(fileInfo.Size))
+		return fileInfo, blob
 	}
+
 	response, err := receiver.Service.Files.Get(fileId).Download()
 	if err != nil {
 		log.Println(err.Error())
 		panic(err)
 	}
 
-	log.Printf("Retreived [%s] from Google Drive...\n", ByteCount(fileInfo.Size))
-	return fileInfo, response.Body
+	blob, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+
+	log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(fileInfo.Size))
+	return fileInfo, blob
 }
 
 func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*DownloadedFile, error) {
@@ -425,13 +437,8 @@ func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*Download
 		}
 	}
 
-	driveFile, res := receiver.GetFileDataById(fileId)
-	fileData, err := ioutil.ReadAll(res)
+	driveFile, fileData := receiver.GetDriveFileBlob(fileId)
 
-	if err != nil {
-		log.Println(err.Error())
-		return nil, err
-	}
 	err = os.WriteFile(location+driveFile.Name, fileData, os.ModePerm)
 	if err != nil {
 		if err != nil {
