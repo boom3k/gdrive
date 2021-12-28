@@ -390,11 +390,12 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 
 func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte) {
 	//Get file information
-	fileInfo := receiver.GetFileById(fileId)
+	driveFile := receiver.GetFileById(fileId)
 	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
-	if strings.Contains(fileInfo.MimeType, "google") {
-		fileInfo.Name = fileInfo.Name + fileInfo.FullFileExtension
-		response, err := receiver.Service.Files.Export(fileId, fileInfo.MimeType).Download()
+	if strings.Contains(driveFile.MimeType, "google") {
+		osMimeType, ext := GetOSMimeType(driveFile.MimeType)
+		driveFile.FullFileExtension = driveFile.Name + ext
+		response, err := receiver.Service.Files.Export(fileId, osMimeType).Download()
 		if err != nil {
 			log.Println(err.Error())
 			panic(err)
@@ -404,8 +405,9 @@ func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte
 			log.Println(err.Error())
 			panic(err)
 		}
-		log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(fileInfo.Size))
-		return fileInfo, blob
+
+		log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
+		return driveFile, blob
 	}
 
 	response, err := receiver.Service.Files.Get(fileId).Download()
@@ -420,8 +422,8 @@ func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte
 		panic(err)
 	}
 
-	log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(fileInfo.Size))
-	return fileInfo, blob
+	log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
+	return driveFile, blob
 }
 
 func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*DownloadedFile, error) {
@@ -473,4 +475,30 @@ func ByteCount(b int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB",
 		float64(b)/float64(div), "kMGTPE"[exp])
+}
+
+func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
+	switch googleWorkspaceMimeType {
+	case "application/vnd.google-apps.spreadsheet":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"
+	case "application" +
+		"/vnd.google-apps.document":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"
+	case "application/vnd.google-apps.presentation":
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"
+	case "application/vnd.google-apps.script":
+		return "text/javascript", ".js"
+	case "application/vnd.google-apps.photo":
+		return "image/png", ".png"
+	case "application/vnd.google-apps.video":
+		return "video/mp4", ".mp4"
+	case "application/vnd.google-apps.drawing":
+		return "image/png", ".png"
+	case "application/vnd.google-apps.audio":
+		return "audio/mpeg", ".mp3"
+	case "application/vnd.google-apps.site":
+		return "text/plain", ".txt"
+	default:
+		return "", ""
+	}
 }
