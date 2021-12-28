@@ -394,7 +394,7 @@ func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte
 	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
 	if strings.Contains(driveFile.MimeType, "google") {
 		osMimeType, ext := GetOSMimeType(driveFile.MimeType)
-		driveFile.FullFileExtension = driveFile.Name + ext
+		driveFile.OriginalFilename = driveFile.Name + ext
 		response, err := receiver.Service.Files.Export(fileId, osMimeType).Download()
 		if err != nil {
 			log.Println(err.Error())
