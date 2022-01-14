@@ -339,11 +339,12 @@ func (receiver *GoogleDrive) RemoveUserPermission(fileId string, permission *dri
 	return err
 }
 
-func (receiver *GoogleDrive) ShareFile(fileId, email, accountType, role string) *drive.Permission {
+func (receiver *GoogleDrive) ShareFile(fileId, email, accountType, role string, notify bool) *drive.Permission {
 	response, err := receiver.Service.
 		Permissions.
 		Create(fileId, &drive.Permission{EmailAddress: email, Type: accountType, Role: strings.ToLower(role)}).
 		Fields("*").
+		SendNotificationEmail(notify).
 		Do()
 
 	if err != nil {
