@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func Builder(client *http.Client, subject string, ctx *context.Context) *GoogleDrive {
+func Builder(client *http.Client, subject string, ctx *context.Context) *GoogleDriveAPI {
 	service, err := drive.NewService(*ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Println(err.Error())
@@ -24,10 +24,10 @@ func Builder(client *http.Client, subject string, ctx *context.Context) *GoogleD
 	}
 
 	log.Printf("Initialized GoogleDrive4Go as (%s)\n", subject)
-	return &GoogleDrive{Service: service, Subject: subject}
+	return &GoogleDriveAPI{Service: service, Subject: subject}
 }
 
-type GoogleDrive struct {
+type GoogleDriveAPI struct {
 	Service *drive.Service
 	Subject string
 }
@@ -42,8 +42,19 @@ type DriveFile struct {
 	OriginalFileID string
 }
 
+func (receiver *GoogleDriveAPI) GetAbout() *drive.About {
+	log.Printf("Getting Drive.About of [%s]\n", receiver.Subject)
+	response, err := receiver.Service.About.Get().Fields("*").Do()
+	if err != nil {
+		log.Println(err.Error())
+		return nil
+	}
+	return response
+}
+
 /*Files*/
-func (receiver *GoogleDrive) GetFileById(fileId string) *drive.File {
+
+func (receiver *GoogleDriveAPI) GetFileById(fileId string) *drive.File {
 	file, err := receiver.Service.Files.Get(fileId).Fields("*").Do()
 	if err != nil {
 		if strings.Contains(err.Error(), "File not found:") {
@@ -59,7 +70,7 @@ func (receiver *GoogleDrive) GetFileById(fileId string) *drive.File {
 	return file
 }
 
-func (receiver *GoogleDrive) QueryFiles(q string) []*drive.File {
+func (receiver *GoogleDriveAPI) QueryFiles(q string) []*drive.File {
 	var allFiles []*drive.File
 	request := receiver.Service.Files.List().Q(q).Fields("*").PageSize(1000)
 
@@ -87,7 +98,7 @@ func (receiver *GoogleDrive) QueryFiles(q string) []*drive.File {
 	return allFiles
 }
 
-func (receiver *GoogleDrive) MoveFile(fileId, parentFolderId string) *drive.File {
+func (receiver *GoogleDriveAPI) MoveFile(fileId, parentFolderId string) *drive.File {
 	updatedDriveFile, err := receiver.Service.Files.Update(
 		fileId,
 		&drive.File{}).
@@ -100,7 +111,7 @@ func (receiver *GoogleDrive) MoveFile(fileId, parentFolderId string) *drive.File
 	return updatedDriveFile
 }
 
-func (receiver *GoogleDrive) CopyFile(fileId, parentFolderId, fileName string) *drive.File {
+func (receiver *GoogleDriveAPI) CopyFile(fileId, parentFolderId, fileName string) *drive.File {
 	msg := "Copy of [" + fileId + "]"
 	response, err := receiver.Service.Files.Copy(fileId, &drive.File{Parents: []string{parentFolderId}}).Do()
 	if err != nil {
@@ -118,7 +129,7 @@ func (receiver *GoogleDrive) CopyFile(fileId, parentFolderId, fileName string) *
 	return response
 }
 
-func (receiver *GoogleDrive) ChangeFileOwner(newOwner, fileId string, doit bool) *drive.Permission {
+func (receiver *GoogleDriveAPI) ChangeFileOwner(newOwner, fileId string, doit bool) *drive.Permission {
 	newPermission := &drive.Permission{}
 	newPermission.EmailAddress = newOwner
 	newPermission.Role = "owner"
@@ -151,12 +162,12 @@ func (receiver *GoogleDrive) ChangeFileOwner(newOwner, fileId string, doit bool)
 
 }
 
-func (receiver *GoogleDrive) ChangeFileOwnerWorker(newOwner, fileId string, doit bool, wg *sync.WaitGroup) {
+func (receiver *GoogleDriveAPI) ChangeFileOwnerWorker(newOwner, fileId string, doit bool, wg *sync.WaitGroup) {
 	receiver.ChangeFileOwner(newOwner, fileId, doit)
 	wg.Done()
 }
 
-func (receiver *GoogleDrive) UploadFile(absoluteFilePath, parentFolderId string) (*drive.File, error) {
+func (receiver *GoogleDriveAPI) UploadFile(absoluteFilePath, parentFolderId string) (*drive.File, error) {
 	byteCount := func(b int64) string {
 		const unit = 1000
 		if b < unit {
@@ -192,7 +203,7 @@ func (receiver *GoogleDrive) UploadFile(absoluteFilePath, parentFolderId string)
 }
 
 /*Folders*/
-func (receiver *GoogleDrive) CopyFolder(sourceFolderId, newSourceFolderName, parentFolderId string) {
+func (receiver *GoogleDriveAPI) CopyFolder(sourceFolderId, newSourceFolderName, parentFolderId string) {
 
 	/*Get source folder*/
 	sourceFolder := receiver.GetFileById(sourceFolderId)
@@ -251,7 +262,7 @@ func (receiver *GoogleDrive) CopyFolder(sourceFolderId, newSourceFolderName, par
 	}
 }
 
-func (receiver *GoogleDrive) CreateFolder(folderName, parentFolderId string, permissions []*drive.Permission, restricted bool) *drive.File {
+func (receiver *GoogleDriveAPI) CreateFolder(folderName, parentFolderId string, permissions []*drive.Permission, restricted bool) *drive.File {
 	file := &drive.File{}
 	file.MimeType = "application/vnd.google-apps.folder"
 	file.Name = folderName
@@ -284,7 +295,7 @@ func (receiver *GoogleDrive) CreateFolder(folderName, parentFolderId string, per
 	return driveFileCreateResponse
 }
 
-func (receiver *GoogleDrive) GetNestedFiles(targetFolderId string) []*drive.File {
+func (receiver *GoogleDriveAPI) GetNestedFiles(targetFolderId string) []*drive.File {
 	targetFolder := receiver.GetFileById(targetFolderId)
 	log.Println("Pulling Children from folder [" + targetFolder.Id + "] - " + targetFolder.Name)
 	files := receiver.QueryFiles("'" + targetFolder.Id + "' in parents")
@@ -306,7 +317,7 @@ func (receiver *GoogleDrive) GetNestedFiles(targetFolderId string) []*drive.File
 }
 
 /*Sharing*/
-func (receiver *GoogleDrive) GetFilePermissions(file *drive.File) string {
+func (receiver *GoogleDriveAPI) GetFilePermissions(file *drive.File) string {
 	var permissionEmails string
 
 	for count, permission := range file.Permissions {
@@ -325,7 +336,7 @@ func (receiver *GoogleDrive) GetFilePermissions(file *drive.File) string {
 	return permissionEmails
 }
 
-func (receiver *GoogleDrive) RemoveUserPermission(fileId string, permission *drive.Permission, execute bool) error {
+func (receiver *GoogleDriveAPI) RemoveUserPermission(fileId string, permission *drive.Permission, execute bool) error {
 	if execute == false {
 		log.Printf("\t\tWould remove %s from %s *DID NOT EXECUTE*\n", permission.EmailAddress, fileId)
 		return nil
@@ -339,7 +350,7 @@ func (receiver *GoogleDrive) RemoveUserPermission(fileId string, permission *dri
 	return err
 }
 
-func (receiver *GoogleDrive) ShareFile(fileId, email, accountType, role string, notify bool) *drive.Permission {
+func (receiver *GoogleDriveAPI) ShareFile(fileId, email, accountType, role string, notify bool) *drive.Permission {
 	response, err := receiver.Service.
 		Permissions.
 		Create(fileId, &drive.Permission{EmailAddress: email, Type: accountType, Role: strings.ToLower(role)}).
@@ -359,18 +370,18 @@ func (receiver *GoogleDrive) ShareFile(fileId, email, accountType, role string, 
 }
 
 /*Workers*/
-func (receiver *GoogleDrive) CopyFileWorker(fileInformation []string, wg *sync.WaitGroup) {
+func (receiver *GoogleDriveAPI) CopyFileWorker(fileInformation []string, wg *sync.WaitGroup) {
 	receiver.CopyFile(fileInformation[0], fileInformation[1], fileInformation[2])
 	wg.Done()
 }
 
-func (receiver *GoogleDrive) RemoveUserPermissionWorker(fileID string, permission *drive.Permission, wg *sync.WaitGroup, execute bool) error {
+func (receiver *GoogleDriveAPI) RemoveUserPermissionWorker(fileID string, permission *drive.Permission, wg *sync.WaitGroup, execute bool) error {
 	err := receiver.RemoveUserPermission(fileID, permission, execute)
 	wg.Done()
 	return err
 }
 
-func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
+func (receiver GoogleDriveAPI) RemoveUserPermissionByIdWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
 	var err error
 	if execute == true {
 		err = receiver.Service.Permissions.Delete(fileID, permissionId).Do()
@@ -389,7 +400,7 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 	return err
 }
 
-func (receiver GoogleDrive) GetFileBlobByID(fileId string) (*drive.File, []byte) {
+func (receiver GoogleDriveAPI) GetFileBlobByID(fileId string) (*drive.File, []byte) {
 	//Get file information
 	log.Printf("Downloading %s as a blob from Google Drive...\n", fileId)
 	driveFile := receiver.GetFileById(fileId)
@@ -428,7 +439,7 @@ func (receiver GoogleDrive) GetFileBlobByID(fileId string) (*drive.File, []byte)
 	return driveFile, blob
 }
 
-func (receiver GoogleDrive) GetInMemoryDriveFileBlob(fileId string) *DriveFile {
+func (receiver GoogleDriveAPI) GetInMemoryDriveFileBlob(fileId string) *DriveFile {
 	driveFile, fileData := receiver.GetFileBlobByID(fileId)
 	localFile := &DriveFile{
 		OriginalFileID: fileId,
