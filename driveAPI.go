@@ -134,7 +134,7 @@ func (receiver *GoogleDriveAPI) ChangeFileOwner(newOwner, fileId string, doit bo
 	newPermission.EmailAddress = newOwner
 	newPermission.Role = "owner"
 	newPermission.Type = "user"
-	changeOwnerRequest := receiver.Service.Permissions.Create(fileId, newPermission).TransferOwnership(true)
+	changeOwnerRequest := receiver.Service.Permissions.Create(fileId, newPermission).TransferOwnership(true).SupportsAllDrives(true)
 	msg := "File [" + fileId + "] old owner [" + receiver.Subject + "] -> new owner [" + newOwner + "] "
 	if doit {
 		response, err := changeOwnerRequest.Do()
