@@ -8,6 +8,7 @@ import (
 	"google.golang.org/api/option"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -15,10 +16,8 @@ import (
 	"time"
 )
 
-var ctx = context.Background()
-
-func Initialize(option *option.ClientOption, subject string) *GoogleDrive {
-	service, err := drive.NewService(ctx, *option)
+func Builder(client *http.Client, subject string, ctx *context.Context) *GoogleDrive {
+	service, err := drive.NewService(*ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Println(err.Error())
 		panic(err)
@@ -33,13 +32,14 @@ type GoogleDrive struct {
 	Subject string
 }
 
-type DownloadedFile struct {
-	FileInfo      os.FileInfo
-	DriveInfo     *drive.File
-	FilePath      string
-	Blob          []byte
-	FileExtension string
-	FullFileName  string
+type DriveFile struct {
+	FileInfo       os.FileInfo
+	DriveInfo      *drive.File
+	FilePath       string
+	Blob           []byte
+	FileExtension  string
+	FullFileName   string
+	OriginalFileID string
 }
 
 /*Files*/
@@ -388,8 +388,9 @@ func (receiver GoogleDrive) RemoveUserPermissionByIdWorker(fileID, permissionId 
 	return err
 }
 
-func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte) {
+func (receiver GoogleDrive) GetFileBlobByID(fileId string) (*drive.File, []byte) {
 	//Get file information
+	log.Printf("Downloading %s as a blob from Google Drive...\n", fileId)
 	driveFile := receiver.GetFileById(fileId)
 	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
 	if strings.Contains(driveFile.MimeType, "google") {
@@ -426,41 +427,48 @@ func (receiver GoogleDrive) GetDriveFileBlob(fileId string) (*drive.File, []byte
 	return driveFile, blob
 }
 
-func (receiver GoogleDrive) DownloadFileById(fileId, location string) (*DownloadedFile, error) {
-	log.Printf("Downloading %s from Google Drive...\n", fileId)
-	fileInfo, err := os.Stat(location)
+func (receiver GoogleDrive) GetInMemoryDriveFileBlob(fileId string) *DriveFile {
+	driveFile, fileData := receiver.GetFileBlobByID(fileId)
+	localFile := &DriveFile{
+		OriginalFileID: fileId,
+		FullFileName:   driveFile.Name + path.Ext(driveFile.Name),
+		Blob:           fileData,
+		DriveInfo:      driveFile,
+		FileExtension:  path.Ext(driveFile.Name),
+	}
+	log.Printf("Downloaded %s to [%s]\n", driveFile.Name)
+	return localFile
+}
+
+func (df *DriveFile) Save(locationPath string) *DriveFile {
+	if df.Blob == nil {
+		log.Printf("Cannot save @[%s] because it has no data\n", &df)
+		return df
+	}
+	_, err := os.Stat(locationPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.Mkdir(location, os.ModePerm); err != nil {
+			if err := os.Mkdir(locationPath, os.ModePerm); err != nil {
 				log.Println(err.Error())
-				return nil, err
+				return df
 			}
-			log.Printf("Created path [%s]\n", location)
+			log.Printf("Created path [%s]\n", locationPath)
 		}
 	}
-
-	driveFile, fileData := receiver.GetDriveFileBlob(fileId)
-
-	err = os.WriteFile(location+driveFile.Name, fileData, os.ModePerm)
+	err = os.WriteFile(locationPath+df.FullFileName, df.Blob, os.ModePerm)
 	if err != nil {
 		if err != nil {
 			log.Println(err.Error())
-			return nil, err
+			return df
 		}
 	}
-
-	localFile := &DownloadedFile{
-		FullFileName:  driveFile.Name + path.Ext(driveFile.Name),
-		FilePath:      location + driveFile.Name,
-		FileInfo:      fileInfo,
-		Blob:          fileData,
-		DriveInfo:     driveFile,
-		FileExtension: path.Ext(driveFile.Name),
+	fileInfo, err := os.Stat(locationPath + df.FullFileName)
+	if err != nil {
+		log.Println(err.Error())
+		return df
 	}
-
-	log.Printf("Downloaded %s to [%s]\n", driveFile.Name, location)
-
-	return localFile, err
+	df.FileInfo = fileInfo
+	return df
 }
 
 func ByteCount(b int64) string {
