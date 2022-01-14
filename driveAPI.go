@@ -350,6 +350,22 @@ func (receiver *GoogleDriveAPI) RemoveUserPermission(fileId string, permission *
 	return err
 }
 
+func (receiver *GoogleDriveAPI) RemovePermissionByID(fileID, permissionID string, execute bool) error {
+	if execute == false {
+		log.Printf("\t\tWould remove [%s] from %s *DID NOT EXECUTE*\n", permissionID, fileID)
+		return nil
+	}
+
+	err := receiver.Service.Permissions.Delete(fileID, permissionID).Do()
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+
+	log.Printf("Removed [%s] from %s\n", permissionID, fileID)
+	return nil
+}
+
 func (receiver *GoogleDriveAPI) ShareFile(fileId, email, accountType, role string, notify bool) *drive.Permission {
 	response, err := receiver.Service.
 		Permissions.
@@ -378,26 +394,13 @@ func (receiver *GoogleDriveAPI) CopyFileWorker(fileInformation []string, wg *syn
 func (receiver *GoogleDriveAPI) RemoveUserPermissionWorker(fileID string, permission *drive.Permission, wg *sync.WaitGroup, execute bool) error {
 	err := receiver.RemoveUserPermission(fileID, permission, execute)
 	wg.Done()
-	return err
+	return err //Channels?
 }
 
-func (receiver GoogleDriveAPI) RemoveUserPermissionByIdWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
-	var err error
-	if execute == true {
-		err = receiver.Service.Permissions.Delete(fileID, permissionId).Do()
-	} else {
-		log.Printf("Would remove [%s] from: %s\n", permissionId, fileID)
-		wg.Done()
-		return err
-	}
-
-	if err != nil {
-		log.Println(err.Error())
-	} else {
-		log.Printf("Removed [%s] from: %s\n", permissionId, fileID)
-	}
+func (receiver GoogleDriveAPI) RemovePermissionByIDWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
+	err := receiver.RemovePermissionByID(fileID, permissionId, execute)
 	wg.Done()
-	return err
+	return err //Channels?
 }
 
 func (receiver GoogleDriveAPI) GetFileBlobByID(fileId string) (*drive.File, []byte) {
