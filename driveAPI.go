@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-func Builder(client *http.Client, subject string, ctx *context.Context) *GoogleDriveAPI {
-	service, err := drive.NewService(*ctx, option.WithHTTPClient(client))
+func Builder(client *http.Client, subject string, ctx context.Context) *GoogleDriveAPI {
+	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Println(err.Error())
 		panic(err)
