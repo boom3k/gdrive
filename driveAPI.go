@@ -78,9 +78,10 @@ func (receiver *GoogleDriveAPI) QueryFiles(q string) []*drive.File {
 		response, err := request.Do()
 		if err != nil {
 			log.Println(err.Error())
-			if strings.Contains(err.Error(), "500") {
-				log.Println("Backing off for 30 seconds...")
-				time.Sleep(time.Second * 30)
+			if strings.Contains(err.Error(), "500") || strings.Contains(err.Error(), "400") {
+				log.Println(err.Error())
+				log.Println("Backing off for 3 seconds...")
+				time.Sleep(time.Second * 3)
 				response, _ = request.Do()
 			} else {
 				log.Println(err.Error())
