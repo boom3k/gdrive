@@ -19,17 +19,17 @@ import (
 func Builder(client *http.Client, subject string, ctx context.Context) *GoogleDriveAPI {
 	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		log.Println(err.Error())
-		panic(err)
+		log.Fatalf(err.Error())
 	}
 
 	log.Printf("Initialized GoogleDrive4Go as (%s)\n", subject)
-	return &GoogleDriveAPI{Service: service, Subject: subject}
+	return &GoogleDriveAPI{Service: service, Subject: subject, RoutineCounter: 0}
 }
 
 type GoogleDriveAPI struct {
-	Service *drive.Service
-	Subject string
+	Service        *drive.Service
+	Subject        string
+	RoutineCounter int
 }
 
 type DriveFile struct {
@@ -105,8 +105,7 @@ func (receiver *GoogleDriveAPI) MoveFile(fileId, parentFolderId string) *drive.F
 		&drive.File{}).
 		AddParents(parentFolderId).Do()
 	if err != nil {
-		log.Println(err.Error())
-		panic(err)
+		log.Fatalf(err.Error())
 	}
 	log.Printf("Drive file [%s] moved to --> [%s]\n", fileId, parentFolderId)
 	return updatedDriveFile
@@ -184,7 +183,7 @@ func (receiver *GoogleDriveAPI) UploadFile(absoluteFilePath, parentFolderId stri
 	}
 	reader, err := os.Open(absoluteFilePath)
 	if err != nil {
-		panic(err)
+		log.Fatalf(err.Error())
 	}
 	fileInfo, _ := reader.Stat()
 	var metaData = &drive.File{Name: fileInfo.Name()}
@@ -317,6 +316,33 @@ func (receiver *GoogleDriveAPI) GetNestedFiles(targetFolderId string) []*drive.F
 	return fileList
 }
 
+func (receiver *GoogleDriveAPI) GetNestedFilesUsingRoutines(targetFolderId string) []*drive.File {
+	receiver.RoutineCounter++
+	log.Printf("Current Routines: %d\n", receiver.RoutineCounter)
+	var fileList []*drive.File
+	q := fmt.Sprintf("'%s' in parents", targetFolderId)
+	queryResponse := receiver.QueryFiles(q)
+	if queryResponse == nil {
+		return nil
+	}
+	for _, file := range queryResponse {
+		log.Printf("Current Object: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
+		if file.MimeType == "application/vnd.google-apps.folder" {
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			go func(f *drive.File) {
+				defer wg.Done()
+				fileList = append(fileList, receiver.GetNestedFilesUsingRoutines(f.Id)...)
+				receiver.RoutineCounter--
+			}(file)
+			wg.Wait()
+		}
+		fileList = append(fileList, file)
+	}
+	log.Printf("Current Routines: %d\n", receiver.RoutineCounter)
+	return fileList
+}
+
 /*Sharing*/
 func (receiver *GoogleDriveAPI) GetFilePermissions(file *drive.File) string {
 	var permissionEmails string
@@ -377,8 +403,7 @@ func (receiver *GoogleDriveAPI) ShareFile(fileId, email, accountType, role strin
 
 	if err != nil {
 		log.Printf("Sharing: %s, to: %s as [%s, %s] FAILED", fileId, email, accountType, role)
-		log.Println(err.Error())
-		panic(err)
+		log.Fatalf(err.Error())
 	} else {
 		log.Printf("Sharing: %s, to: %s as [%s, %s] SUCCESS", fileId, email, accountType, role)
 
@@ -414,13 +439,11 @@ func (receiver GoogleDriveAPI) GetFileBlobByID(fileId string) (*drive.File, []by
 		driveFile.OriginalFilename = driveFile.Name + ext
 		response, err := receiver.Service.Files.Export(fileId, osMimeType).Download()
 		if err != nil {
-			log.Println(err.Error())
-			panic(err)
+			log.Fatalf(err.Error())
 		}
 		blob, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			log.Println(err.Error())
-			panic(err)
+			log.Fatalf(err.Error())
 		}
 
 		log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
@@ -429,14 +452,12 @@ func (receiver GoogleDriveAPI) GetFileBlobByID(fileId string) (*drive.File, []by
 
 	response, err := receiver.Service.Files.Get(fileId).Download()
 	if err != nil {
-		log.Println(err.Error())
-		panic(err)
+		log.Fatalf(err.Error())
 	}
 
 	blob, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Println(err.Error())
-		panic(err)
+		log.Fatalf(err.Error())
 	}
 
 	log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
