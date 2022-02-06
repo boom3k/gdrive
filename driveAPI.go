@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) DriveAPI {
-	newDriveAPI := DriveAPI{}
+func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) *DriveAPI {
+	newDriveAPI := &DriveAPI{}
 	newDriveAPI.Build(client, subject, ctx)
 	return newDriveAPI
 }
