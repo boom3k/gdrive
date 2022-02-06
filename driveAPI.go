@@ -3,6 +3,7 @@ package googledrive4go
 import (
 	"context"
 	"fmt"
+	"github.com/boom3k/googledrive4go"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -51,6 +52,13 @@ type DriveFile struct {
 	FileExtension  string
 	FullFileName   string
 	OriginalFileID string
+}
+
+type FileTransfer struct {
+	Owner    string
+	NewOwner string
+	DriveAPI *googledrive4go.DriveAPI
+	Files    []string
 }
 
 func (receiver *DriveAPI) GetAbout() *drive.About {
