@@ -147,12 +147,16 @@ func (receiver *DriveAPI) CopyFile(fileId, parentFolderId, fileName string) *dri
 	return response
 }
 
-func (receiver *DriveAPI) ChangeFileOwner(newOwner, fileId string, doit bool) *drive.Permission {
+func GetTransferCall(newOwner, fileId string, service *drive.Service) *drive.PermissionsCreateCall {
 	newPermission := &drive.Permission{}
 	newPermission.EmailAddress = newOwner
 	newPermission.Role = "owner"
 	newPermission.Type = "user"
-	changeOwnerRequest := receiver.Service.Permissions.Create(fileId, newPermission).TransferOwnership(true).SupportsAllDrives(true)
+	return service.Permissions.Create(fileId, newPermission).TransferOwnership(true).SupportsAllDrives(true)
+}
+
+func (receiver *DriveAPI) ChangeFileOwner(newOwner, fileId string, doit bool) *drive.Permission {
+	changeOwnerRequest := GetTransferCall(newOwner, fileId, receiver.Service)
 	msg := "File [" + fileId + "] old owner [" + receiver.Subject + "] -> new owner [" + newOwner + "] "
 	if doit {
 		response, err := changeOwnerRequest.Do()
@@ -177,7 +181,6 @@ func (receiver *DriveAPI) ChangeFileOwner(newOwner, fileId string, doit bool) *d
 		log.Println(msg + " DID NOT EXECUTE")
 		return nil
 	}
-
 }
 
 func (receiver *DriveAPI) ChangeFileOwnerWorker(newOwner, fileId string, doit bool, wg *sync.WaitGroup) {
