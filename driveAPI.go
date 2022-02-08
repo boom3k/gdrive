@@ -450,11 +450,10 @@ func (receiver DriveAPI) RemovePermissionByIDWorker(fileID, permissionId string,
 	return err //Channels?
 }
 
-func (receiver DriveAPI) GetFileBlobByID(fileId string) (*drive.File, []byte) {
+func (receiver DriveAPI) GetDriveFileBlobById(fileId string) (*drive.File, []byte) {
 	//Get file information
-	log.Printf("Downloading %s as a blob from Google Drive...\n", fileId)
+	log.Printf("Retrieving %s as a blob from Google Drive...\n", fileId)
 	driveFile := receiver.GetFileById(fileId)
-	log.Printf("Retreiving file [%s] data from Google Drive...\n", fileId)
 	if strings.Contains(driveFile.MimeType, "google") {
 		osMimeType, ext := GetOSMimeType(driveFile.MimeType)
 		driveFile.OriginalFilename = driveFile.Name + ext
@@ -485,8 +484,8 @@ func (receiver DriveAPI) GetFileBlobByID(fileId string) (*drive.File, []byte) {
 	return driveFile, blob
 }
 
-func (receiver DriveAPI) GetInMemoryDriveFileBlob(fileId string) *DriveFile {
-	driveFile, fileData := receiver.GetFileBlobByID(fileId)
+func (receiver DriveAPI) GetDriveFile(fileId string) *DriveFile {
+	driveFile, fileData := receiver.GetDriveFileBlobById(fileId)
 	localFile := &DriveFile{
 		OriginalFileID: fileId,
 		FullFileName:   driveFile.Name + path.Ext(driveFile.Name),
@@ -494,7 +493,6 @@ func (receiver DriveAPI) GetInMemoryDriveFileBlob(fileId string) *DriveFile {
 		DriveInfo:      driveFile,
 		FileExtension:  path.Ext(driveFile.Name),
 	}
-	log.Printf("Downloaded %s to [%s]\n", driveFile.Name)
 	return localFile
 }
 
@@ -526,6 +524,8 @@ func (df *DriveFile) Save(locationPath string) *DriveFile {
 		return df
 	}
 	df.FileInfo = fileInfo
+	log.Printf("Downloaded %s to [%s]\n", df.DriveInfo.Name, locationPath)
+
 	return df
 }
 
