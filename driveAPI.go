@@ -511,14 +511,14 @@ func (df *DriveFile) Save(locationPath string) *DriveFile {
 			log.Printf("Created path [%s]\n", locationPath)
 		}
 	}
-	err = os.WriteFile(locationPath+df.FullFileName, df.Blob, os.ModePerm)
+	err = os.WriteFile(locationPath+df.DriveInfo.Name, df.Blob, os.ModePerm)
 	if err != nil {
 		if err != nil {
 			log.Println(err.Error())
 			return df
 		}
 	}
-	fileInfo, err := os.Stat(locationPath + df.FullFileName)
+	fileInfo, err := os.Stat(locationPath + df.DriveInfo.Name)
 	if err != nil {
 		log.Println(err.Error())
 		return df
