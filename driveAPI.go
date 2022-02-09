@@ -80,8 +80,8 @@ func (receiver *DriveAPI) GetFileById(fileId string) *drive.File {
 			return nil
 		}
 		log.Println(err.Error())
-		log.Println("Error encountered Sleeping for 30 seconds...")
-		time.Sleep(time.Second * 30)
+		log.Println("Error encountered Sleeping for 2 seconds...")
+		time.Sleep(time.Second * 2)
 		return receiver.GetFileById(fileId)
 	}
 	log.Printf("Returned [%s] -> \"%s\"\n", fileId, file.Name)
