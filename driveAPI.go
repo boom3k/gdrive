@@ -43,7 +43,7 @@ func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context
 	return receiver
 }
 
-type DriveFile struct {
+type ClientDriveFile struct {
 	FileInfo       os.FileInfo
 	DriveInfo      *drive.File
 	FilePath       string
@@ -51,6 +51,7 @@ type DriveFile struct {
 	FileExtension  string
 	FullFileName   string
 	OriginalFileID string
+	Size           string
 }
 
 type FileTransfer struct {
@@ -450,53 +451,50 @@ func (receiver DriveAPI) RemovePermissionByIDWorker(fileID, permissionId string,
 	return err //Channels?
 }
 
-func (receiver DriveAPI) GetDriveFileBlobById(fileId string) (*drive.File, []byte) {
-	//Get file information
-	log.Printf("Retrieving %s as a blob from Google Drive...\n", fileId)
-	driveFile := receiver.GetFileById(fileId)
-	if strings.Contains(driveFile.MimeType, "google") {
-		osMimeType, ext := GetOSMimeType(driveFile.MimeType)
-		driveFile.OriginalFilename = driveFile.Name + ext
-		response, err := receiver.Service.Files.Export(fileId, osMimeType).Download()
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
-		blob, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
+func (receiver DriveAPI) GetBlob(file *drive.File) []byte {
+	log.Printf("Retrieving %s as a blob from Google Drive...\n", file.Id)
+	var blob []byte
+	var err error
+	var response *http.Response
 
-		log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
-		return driveFile, blob
+	if strings.Contains(file.MimeType, "shortcut") ||
+		strings.Contains(file.MimeType, "folder") {
+		log.Printf("File \"%s\" [%s] is a %s and will not be downloaded\n", file.Name, file.Id, file.MimeType)
+		return nil
+	} else if strings.Contains(file.MimeType, "google") {
+		osMimeType, _ := GetOSMimeType(file.MimeType)
+		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Fields("*").Download()
+	} else {
+		response, err = receiver.Service.Files.Get(file.Id).Fields("*").Download()
 	}
 
-	response, err := receiver.Service.Files.Get(fileId).Download()
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 
-	blob, err := ioutil.ReadAll(response.Body)
+	blob, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
+	log.Printf("Size: %s, File: \"%s\", ID:[%s], Type: %s\n", ByteCount(int64(len(blob))), file.Name, file.Id, file.MimeType)
 
-	log.Printf("Pulled \"%s\" blob from Google Drive...\n", ByteCount(driveFile.Size))
-	return driveFile, blob
+	return blob
 }
 
-func (receiver DriveAPI) GetDriveFile(fileId string) *DriveFile {
-	driveFile, fileData := receiver.GetDriveFileBlobById(fileId)
-	localFile := &DriveFile{
-		OriginalFileID: fileId,
-		FullFileName:   driveFile.Name + path.Ext(driveFile.Name),
-		Blob:           fileData,
-		DriveInfo:      driveFile,
-		FileExtension:  path.Ext(driveFile.Name),
+func (receiver DriveAPI) GetClientDriveFile(file *drive.File) *ClientDriveFile {
+	blob := receiver.GetBlob(file)
+	localFile := &ClientDriveFile{
+		OriginalFileID: file.Id,
+		FullFileName:   file.Name + path.Ext(file.Name),
+		Blob:           blob,
+		DriveInfo:      file,
+		Size:           ByteCount(int64(len(blob))),
+		FileExtension:  path.Ext(file.Name),
 	}
 	return localFile
 }
 
-func (df *DriveFile) Save(locationPath string) *DriveFile {
+func (df *ClientDriveFile) Save(locationPath string) *ClientDriveFile {
 	if df.Blob == nil {
 		log.Printf("Cannot save @[%s] because it has no data\n", &df)
 		return df
