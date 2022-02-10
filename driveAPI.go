@@ -497,7 +497,7 @@ func (df *DriveFile) Save(locationPath string) *DriveFile {
 		log.Printf("Cannot save @[%s] because it has no data\n", &df)
 		return df
 	}
-	err := os.WriteFile(locationPath+df.GoogleDriveObject.Name, df.Blob, os.ModePerm)
+	err := os.WriteFile(locationPath+df.GoogleDriveObject.OriginalFilename, df.Blob, os.ModePerm)
 	if err != nil {
 		if err != nil {
 			log.Println(err.Error())
