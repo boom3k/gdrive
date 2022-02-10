@@ -38,7 +38,7 @@ func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context
 	receiver.RoutineCounter = 0
 	log.Printf("DriveAPI --> \n"+
 		"\tService: %v\n"+
-		"\tSubject: %s\n", receiver.Service, receiver.Subject,
+		"\tSubject: %s\n", receiver, receiver.Subject,
 	)
 	return receiver
 }
@@ -463,9 +463,13 @@ func (receiver DriveAPI) GetBlob(file *drive.File) []byte {
 		return nil
 	} else if strings.Contains(file.MimeType, "google") {
 		osMimeType, _ := GetOSMimeType(file.MimeType)
-		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Fields("*").Download()
+		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Download()
+		log.Printf("File \"%s\" [%s] - Converted from %s to a %s\n",
+			file.Name, file.Id, strings.Split(file.MimeType, "vnd.")[1], osMimeType)
 	} else {
-		response, err = receiver.Service.Files.Get(file.Id).Fields("*").Download()
+		log.Printf("File \"%s\" [%s] - saved as from %s\n",
+			file.Name, file.Id, file.FullFileExtension)
+		response, err = receiver.Service.Files.Get(file.Id).Download()
 	}
 
 	if err != nil {
@@ -545,8 +549,7 @@ func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
 	switch googleWorkspaceMimeType {
 	case "application/vnd.google-apps.spreadsheet":
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"
-	case "application" +
-		"/vnd.google-apps.document":
+	case "application/vnd.google-apps.document":
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"
 	case "application/vnd.google-apps.presentation":
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"
