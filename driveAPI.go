@@ -457,6 +457,9 @@ func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 		return file, nil
 	} else if strings.Contains(file.MimeType, "google") {
 		osMimeType, ext := GetOSMimeType(file.MimeType)
+		if osMimeType == "" {
+			return file, nil
+		}
 		file.FileExtension = ext
 		file.OriginalFilename = file.Name + ext
 		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Download()
