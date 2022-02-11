@@ -470,7 +470,14 @@ func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 	}
 
 	if err != nil {
-		log.Fatalf(err.Error())
+		if strings.Contains(err.Error(), " 4") {
+			seconds := 2
+			log.Printf("%s, backing off for %d seconds...\n", err.Error(), seconds)
+			time.Sleep(time.Second * time.Duration(int64(seconds)))
+			return receiver.GetBlob(file)
+		} else {
+			log.Fatalf(err.Error())
+		}
 	}
 
 	blob, err = ioutil.ReadAll(response.Body)
