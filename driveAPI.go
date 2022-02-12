@@ -25,6 +25,7 @@ type DriveAPI struct {
 	Service        *drive.Service
 	Subject        string
 	RoutineCounter int
+	WaitGroup      *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -470,14 +471,10 @@ func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 	}
 
 	if err != nil {
-		if strings.Contains(err.Error(), " 4") {
-			seconds := 2
-			log.Printf("%s, backing off for %d seconds...\n", err.Error(), seconds)
-			time.Sleep(time.Second * time.Duration(int64(seconds)))
-			return receiver.GetBlob(file)
-		} else {
-			log.Fatalf(err.Error())
-		}
+		seconds := 10
+		log.Printf("%s, backing off for %d seconds...\n", err.Error(), seconds)
+		time.Sleep(time.Second * time.Duration(int64(seconds)))
+		return receiver.GetBlob(file)
 	}
 
 	blob, err = ioutil.ReadAll(response.Body)
@@ -504,7 +501,7 @@ func (receiver DriveAPI) GetClientDriveFile(file *drive.File) *DriveFile {
 
 func (df *DriveFile) Save(locationPath string) *DriveFile {
 	if df.Blob == nil {
-		log.Printf("Cannot save @[%s] because it has no data\n", &df)
+		log.Printf("Cannot save %s [%s] <https://drive.google.com/drive/folders/%s> because it has no data\n", df.GoogleDriveObject.Name, df.GoogleDriveObject.Id, df.GoogleDriveObject.Parents[0])
 		return df
 	}
 	err := os.WriteFile(locationPath+df.GoogleDriveObject.OriginalFilename, df.Blob, os.ModePerm)
