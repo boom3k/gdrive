@@ -1,6 +1,6 @@
 module github.com/boom3k/googledrive4go
 
-go 1.18
+go 1.17
 
 require google.golang.org/api v0.68.0
 

@@ -25,7 +25,7 @@ type DriveAPI struct {
 	Service        *drive.Service
 	Subject        string
 	RoutineCounter int
-	Jobs      *sync.WaitGroup
+	Jobs           *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -201,6 +201,7 @@ func (receiver *DriveAPI) UploadFile(absoluteFilePath, parentFolderId string) (*
 	reader, err := os.Open(absoluteFilePath)
 	if err != nil {
 		log.Fatalf(err.Error())
+		panic(err)
 	}
 	fileInfo, _ := reader.Stat()
 	var metaData = &drive.File{Name: fileInfo.Name()}
