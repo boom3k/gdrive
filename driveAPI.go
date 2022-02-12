@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +25,7 @@ type DriveAPI struct {
 	Service        *drive.Service
 	Subject        string
 	RoutineCounter int
+	WaitGroup      *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -38,20 +38,15 @@ func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context
 	receiver.RoutineCounter = 0
 	log.Printf("DriveAPI --> \n"+
 		"\tService: %v\n"+
-		"\tSubject: %s\n", receiver.Service, receiver.Subject,
+		"\tSubject: %s\n", receiver, receiver.Subject,
 	)
 	return receiver
 }
 
-type ClientDriveFile struct {
-	FileInfo       os.FileInfo
-	DriveInfo      *drive.File
-	FilePath       string
-	Blob           []byte
-	FileExtension  string
-	FullFileName   string
-	OriginalFileID string
-	Size           string
+type DriveFile struct {
+	OSFileInfo        os.FileInfo
+	GoogleDriveObject *drive.File
+	Blob              []byte
 }
 
 type FileTransfer struct {
@@ -451,7 +446,7 @@ func (receiver DriveAPI) RemovePermissionByIDWorker(fileID, permissionId string,
 	return err //Channels?
 }
 
-func (receiver DriveAPI) GetBlob(file *drive.File) []byte {
+func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 	log.Printf("Retrieving %s as a blob from Google Drive...\n", file.Id)
 	var blob []byte
 	var err error
@@ -460,69 +455,69 @@ func (receiver DriveAPI) GetBlob(file *drive.File) []byte {
 	if strings.Contains(file.MimeType, "shortcut") ||
 		strings.Contains(file.MimeType, "folder") {
 		log.Printf("File \"%s\" [%s] is a %s and will not be downloaded\n", file.Name, file.Id, file.MimeType)
-		return nil
+		return file, nil
 	} else if strings.Contains(file.MimeType, "google") {
-		osMimeType, _ := GetOSMimeType(file.MimeType)
-		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Fields("*").Download()
+		osMimeType, ext := GetOSMimeType(file.MimeType)
+		if osMimeType == "" {
+			return file, nil
+		}
+		file.FileExtension = ext
+		file.OriginalFilename = file.Name + ext
+		response, err = receiver.Service.Files.Export(file.Id, osMimeType).Download()
+		log.Printf("File \"%s\" [%s] - Converted from %s to a %s\n", file.Name, file.Id, strings.Split(file.MimeType, "vnd.")[1], osMimeType)
 	} else {
-		response, err = receiver.Service.Files.Get(file.Id).Fields("*").Download()
+		log.Printf("File \"%s\" [%s] - saved as from %s\n", file.Name, file.Id, file.FullFileExtension)
+		response, err = receiver.Service.Files.Get(file.Id).Download()
 	}
 
 	if err != nil {
-		log.Fatalf(err.Error())
+		seconds := 10
+		log.Printf("%s, backing off for %d seconds...\n", err.Error(), seconds)
+		time.Sleep(time.Second * time.Duration(int64(seconds)))
+		return receiver.GetBlob(file)
 	}
 
 	blob, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	log.Printf("Size: %s, File: \"%s\", ID:[%s], Type: %s\n", ByteCount(int64(len(blob))), file.Name, file.Id, file.MimeType)
 
-	return blob
+	if file.Size < 1 {
+		file.Size = int64(len(blob))
+	}
+
+	log.Printf("Size: %s, File: \"%s\", ID:[%s], Type: %s\n", ByteCount(int64(len(blob))), file.Name, file.Id, file.MimeType)
+	return file, blob
 }
 
-func (receiver DriveAPI) GetClientDriveFile(file *drive.File) *ClientDriveFile {
-	blob := receiver.GetBlob(file)
-	localFile := &ClientDriveFile{
-		OriginalFileID: file.Id,
-		FullFileName:   file.Name + path.Ext(file.Name),
-		Blob:           blob,
-		DriveInfo:      file,
-		Size:           ByteCount(int64(len(blob))),
-		FileExtension:  path.Ext(file.Name),
+func (receiver DriveAPI) GetClientDriveFile(file *drive.File) *DriveFile {
+	callbackFile, blob := receiver.GetBlob(file)
+	localFile := &DriveFile{
+		Blob:              blob,
+		GoogleDriveObject: callbackFile,
 	}
 	return localFile
 }
 
-func (df *ClientDriveFile) Save(locationPath string) *ClientDriveFile {
+func (df *DriveFile) Save(locationPath string) *DriveFile {
 	if df.Blob == nil {
-		log.Printf("Cannot save @[%s] because it has no data\n", &df)
+		log.Printf("Cannot save %s [%s] <https://drive.google.com/drive/folders/%s> because it has no data\n", df.GoogleDriveObject.Name, df.GoogleDriveObject.Id, df.GoogleDriveObject.Parents[0])
 		return df
 	}
-	_, err := os.Stat(locationPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if err := os.Mkdir(locationPath, os.ModePerm); err != nil {
-				log.Println(err.Error())
-				return df
-			}
-			log.Printf("Created path [%s]\n", locationPath)
-		}
-	}
-	err = os.WriteFile(locationPath+df.DriveInfo.Name, df.Blob, os.ModePerm)
+	err := os.WriteFile(locationPath+df.GoogleDriveObject.OriginalFilename, df.Blob, os.ModePerm)
 	if err != nil {
 		if err != nil {
 			log.Println(err.Error())
 			return df
 		}
 	}
-	fileInfo, err := os.Stat(locationPath + df.DriveInfo.Name)
+	fileInfo, err := os.Stat(locationPath + df.GoogleDriveObject.Name)
 	if err != nil {
 		log.Println(err.Error())
 		return df
 	}
-	df.FileInfo = fileInfo
-	log.Printf("Downloaded %s to [%s]\n", df.DriveInfo.Name, locationPath)
+	df.OSFileInfo = fileInfo
+	log.Printf("Downloaded %s to [%s]\n", df.GoogleDriveObject.Name, locationPath)
 
 	return df
 }
@@ -545,8 +540,7 @@ func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
 	switch googleWorkspaceMimeType {
 	case "application/vnd.google-apps.spreadsheet":
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"
-	case "application" +
-		"/vnd.google-apps.document":
+	case "application/vnd.google-apps.document":
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"
 	case "application/vnd.google-apps.presentation":
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"
