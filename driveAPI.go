@@ -106,11 +106,15 @@ func (receiver *DriveAPI) QueryFiles(q string) []*drive.File {
 					time.Sleep(time.Second * 10)
 				}()
 				receiver.MainJob.Wait()
+				log.Printf("Requerying %s from [%d] thus far\n", q, len(allFiles))
 				response, _ = request.Do()
 			} else {
 				log.Println(err.Error())
 				return allFiles
 			}
+		}
+		if response == nil {
+			break
 		}
 		allFiles = append(allFiles, response.Files...)
 		request.PageToken(response.NextPageToken)
