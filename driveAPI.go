@@ -94,22 +94,17 @@ func (receiver *DriveAPI) QueryFiles(q string) []*drive.File {
 
 	for {
 		response, err := request.Do()
-		if err != nil {
-			log.Println(err.Error())
-			if strings.Contains(err.Error(), "500") || strings.Contains(err.Error(), "Error 40") {
-				log.Println(err.Error())
-
-				log.Println("Backing off for 3 seconds...")
-				time.Sleep(time.Second * 3)
-				log.Printf("Requerying %s from [%d] thus far\n", q, len(allFiles))
-				response, _ = request.Do()
+		for {
+			if err != nil {
+				if strings.Contains(err.Error(), "500") || strings.Contains(err.Error(), "Error 40") {
+					log.Println(err.Error())
+					log.Printf("Backing off for 3 seconds, will try (%s) again...\n", q)
+					time.Sleep(time.Second * 3)
+					response, err = request.Do()
+				}
 			} else {
-				log.Println(err.Error())
-				return allFiles
+				break
 			}
-		}
-		if response == nil {
-			break
 		}
 		allFiles = append(allFiles, response.Files...)
 		request.PageToken(response.NextPageToken)
