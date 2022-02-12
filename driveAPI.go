@@ -25,7 +25,7 @@ type DriveAPI struct {
 	Service        *drive.Service
 	Subject        string
 	RoutineCounter int
-	WaitGroup      *sync.WaitGroup
+	Jobs      *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
