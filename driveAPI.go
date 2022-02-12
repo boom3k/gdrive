@@ -26,7 +26,6 @@ type DriveAPI struct {
 	Subject        string
 	RoutineCounter int
 	Jobs           *sync.WaitGroup
-	MainJob        *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -99,13 +98,9 @@ func (receiver *DriveAPI) QueryFiles(q string) []*drive.File {
 			log.Println(err.Error())
 			if strings.Contains(err.Error(), "500") || strings.Contains(err.Error(), "Error 40") {
 				log.Println(err.Error())
-				receiver.MainJob.Add(1)
-				go func() {
-					defer receiver.MainJob.Done()
-					log.Println("Backing off for 10 seconds...")
-					time.Sleep(time.Second * 10)
-				}()
-				receiver.MainJob.Wait()
+
+				log.Println("Backing off for 3 seconds...")
+				time.Sleep(time.Second * 3)
 				log.Printf("Requerying %s from [%d] thus far\n", q, len(allFiles))
 				response, _ = request.Do()
 			} else {
@@ -123,7 +118,6 @@ func (receiver *DriveAPI) QueryFiles(q string) []*drive.File {
 			break
 		}
 	}
-
 	return allFiles
 }
 
