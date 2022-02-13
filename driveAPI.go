@@ -24,8 +24,9 @@ func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) 
 type DriveAPI struct {
 	Service        *drive.Service
 	Subject        string
-	RoutineCounter int
 	Jobs           *sync.WaitGroup
+	JobFiles       []*drive.File
+	RoutineCounter int
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -36,10 +37,8 @@ func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context
 	receiver.Service = service
 	receiver.Subject = subject
 	receiver.RoutineCounter = 0
-	log.Printf("DriveAPI --> \n"+
-		"\tService: %v\n"+
-		"\tSubject: %s\n", receiver, receiver.Subject,
-	)
+	receiver.Jobs = &sync.WaitGroup{}
+	log.Printf("DriveAPI --> %v\n", receiver)
 	return receiver
 }
 
@@ -444,13 +443,13 @@ func (receiver *DriveAPI) RemoveUserPermissionWorker(fileID string, permission *
 	return err //Channels?
 }
 
-func (receiver DriveAPI) RemovePermissionByIDWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
+func (receiver *DriveAPI) RemovePermissionByIDWorker(fileID, permissionId string, wg *sync.WaitGroup, execute bool) error {
 	err := receiver.RemovePermissionByID(fileID, permissionId, execute)
 	wg.Done()
 	return err //Channels?
 }
 
-func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
+func (receiver *DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 	log.Printf("Retrieving %s as a blob from Google Drive...\n", file.Id)
 	var blob []byte
 	var err error
@@ -494,7 +493,7 @@ func (receiver DriveAPI) GetBlob(file *drive.File) (*drive.File, []byte) {
 	return file, blob
 }
 
-func (receiver DriveAPI) GetClientDriveFile(file *drive.File) *DriveFile {
+func (receiver *DriveAPI) GetClientDriveFile(file *drive.File) *DriveFile {
 	callbackFile, blob := receiver.GetBlob(file)
 	localFile := &DriveFile{
 		Blob:              blob,
@@ -563,4 +562,25 @@ func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
 	default:
 		return "", ""
 	}
+}
+
+func (receiver *DriveAPI) XXX(targetFolderId string) []*drive.File {
+	receiver.Jobs.Add(1)
+	defer receiver.Jobs.Done()
+
+	q := fmt.Sprintf("'%s' in parents", targetFolderId)
+	queryResponse := receiver.QueryFiles(q)
+	if queryResponse == nil {
+		return nil
+	}
+	for _, file := range queryResponse {
+		log.Printf("Current Object: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
+		if file.MimeType == "application/vnd.google-apps.folder" {
+			go func(f *drive.File) {
+				receiver.JobFiles = append(receiver.JobFiles, receiver.XXX(f.Id)...)
+			}(file)
+		}
+		receiver.JobFiles = append(receiver.JobFiles, file)
+	}
+	return receiver.JobFiles
 }
