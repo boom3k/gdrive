@@ -3,6 +3,7 @@ package googledrive4go
 import (
 	"context"
 	"fmt"
+	"github.com/boom3k/utils4go"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -22,11 +23,9 @@ func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) 
 }
 
 type DriveAPI struct {
-	Service        *drive.Service
-	Subject        string
-	Jobs           *sync.WaitGroup
-	JobFiles       []*drive.File
-	RoutineCounter int
+	Service *drive.Service
+	Subject string
+	Jobs    *sync.WaitGroup
 }
 
 func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
@@ -36,7 +35,6 @@ func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context
 	}
 	receiver.Service = service
 	receiver.Subject = subject
-	receiver.RoutineCounter = 0
 	receiver.Jobs = &sync.WaitGroup{}
 	log.Printf("DriveAPI --> %v\n", receiver)
 	return receiver
@@ -337,8 +335,6 @@ func (receiver *DriveAPI) GetNestedFiles(targetFolderId string) []*drive.File {
 }
 
 func (receiver *DriveAPI) GetNestedFilesUsingRoutines(targetFolderId string) []*drive.File {
-	receiver.RoutineCounter++
-	log.Printf("Current Routines: %d\n", receiver.RoutineCounter)
 	var fileList []*drive.File
 	q := fmt.Sprintf("'%s' in parents", targetFolderId)
 	queryResponse := receiver.QueryFiles(q)
@@ -353,14 +349,31 @@ func (receiver *DriveAPI) GetNestedFilesUsingRoutines(targetFolderId string) []*
 			go func(f *drive.File) {
 				defer wg.Done()
 				fileList = append(fileList, receiver.GetNestedFilesUsingRoutines(f.Id)...)
-				receiver.RoutineCounter--
 			}(file)
 			wg.Wait()
 		}
 		fileList = append(fileList, file)
 	}
-	log.Printf("Current Routines: %d\n", receiver.RoutineCounter)
 	return fileList
+}
+
+func (receiver *DriveAPI) PrintFolderAnalysis(targetFolderId string, csvFile *os.File) {
+	log.Printf("Pulling Children from folder [%s]\n", targetFolderId)
+	q := fmt.Sprintf("'%s' in parents", targetFolderId)
+	queryResponse := receiver.QueryFiles(q)
+	for _, file := range queryResponse {
+		log.Printf("Current file: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
+		if file.MimeType == "application/vnd.google-apps.folder" {
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			go func(f *drive.File, csv *os.File) {
+				defer wg.Done()
+				receiver.PrintFolderAnalysis(f.Id, csv)
+			}(file, csvFile)
+			wg.Wait()
+		}
+		utils4go.AppendRowToCSVFile([]interface{}{file.Owners[0].EmailAddress, file.Id}, csvFile)
+	}
 }
 
 /*Sharing*/
@@ -562,24 +575,4 @@ func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
 	default:
 		return "", ""
 	}
-}
-
-func (receiver *DriveAPI) AggregateFiles(targetFolderId string) []*drive.File {
-	receiver.Jobs.Add(1)
-	defer receiver.Jobs.Done()
-	q := fmt.Sprintf("'%s' in parents", targetFolderId)
-	queryResponse := receiver.QueryFiles(q)
-	if queryResponse == nil {
-		return nil
-	}
-	for _, file := range queryResponse {
-		log.Printf("Current Object: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
-		if file.MimeType == "application/vnd.google-apps.folder" {
-			go func(f drive.File) {
-				receiver.JobFiles = append(receiver.JobFiles, receiver.AggregateFiles(f.Id)...)
-			}(*file)
-		}
-		receiver.JobFiles = append(receiver.JobFiles, file)
-	}
-	return receiver.JobFiles
 }
