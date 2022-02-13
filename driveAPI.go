@@ -376,7 +376,7 @@ func (receiver *DriveAPI) PrintFolderAnalysis(targetFolderId string, csvFile *os
 	}
 }
 
-func (receiver *DriveAPI) PrintFolderAnalysisBLAZING(targetFolderId string, csvFile *os.File) {
+func (receiver *DriveAPI) PrintFolderAnalysisBLAZINGG(targetFolderId string, csvFile *os.File) {
 	receiver.Jobs.Add(1)
 	defer receiver.Jobs.Done()
 	log.Printf("Pulling Children from folder [%s]\n", targetFolderId)
@@ -385,10 +385,11 @@ func (receiver *DriveAPI) PrintFolderAnalysisBLAZING(targetFolderId string, csvF
 	for _, file := range queryResponse {
 		log.Printf("Current file: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
 		if file.MimeType == "application/vnd.google-apps.folder" {
-			go func(f *drive.File, csv *os.File) {
-				receiver.PrintFolderAnalysis(f.Id, csv)
-			}(file, csvFile)
+			go func(f *drive.File, csv os.File) {
+				receiver.PrintFolderAnalysis(f.Id, &csv)
+			}(file, *csvFile)
 		}
+		log.Printf("Writing to: %s\n", csvFile.Name())
 		utils4go.AppendRowToCSVFile([]interface{}{file.Owners[0].EmailAddress, file.Id}, csvFile)
 	}
 }
