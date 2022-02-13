@@ -564,7 +564,7 @@ func GetOSMimeType(googleWorkspaceMimeType string) (string, string) {
 	}
 }
 
-func (receiver *DriveAPI) XXX(targetFolderId string) []*drive.File {
+func (receiver *DriveAPI) AddFiles(targetFolderId string) []*drive.File {
 	receiver.Jobs.Add(1)
 	defer receiver.Jobs.Done()
 
@@ -577,7 +577,7 @@ func (receiver *DriveAPI) XXX(targetFolderId string) []*drive.File {
 		log.Printf("Current Object: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
 		if file.MimeType == "application/vnd.google-apps.folder" {
 			go func(f *drive.File) {
-				receiver.JobFiles = append(receiver.JobFiles, receiver.XXX(f.Id)...)
+				receiver.AddFiles(f.Id)
 			}(file)
 		}
 		receiver.JobFiles = append(receiver.JobFiles, file)
