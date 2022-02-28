@@ -284,9 +284,7 @@ func (receiver *DriveAPI) CreateFolder(folderName, parentFolderId string, permis
 	file := &drive.File{}
 	file.MimeType = "application/vnd.google-apps.folder"
 	file.Name = folderName
-	if parentFolderId != "" {
-		file.Parents = []string{parentFolderId}
-	}
+	file.Parents = append(file.Parents, parentFolderId)
 
 	driveFileCreateResponse, filesCreateErr := receiver.Service.Files.Create(file).Do()
 	if filesCreateErr != nil {
@@ -459,7 +457,6 @@ func (receiver *DriveAPI) ShareFile(fileId, email, accountType, role string, not
 		log.Fatalf(err.Error())
 	} else {
 		log.Printf("Sharing: %s, to: %s as [%s, %s] SUCCESS", fileId, email, accountType, role)
-
 	}
 	return response
 }
