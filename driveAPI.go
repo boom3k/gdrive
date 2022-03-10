@@ -3,7 +3,6 @@ package googledrive4go
 import (
 	"context"
 	"fmt"
-	"github.com/boom3k/utils4go"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -18,7 +17,13 @@ import (
 
 func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) *DriveAPI {
 	newDriveAPI := &DriveAPI{}
-	newDriveAPI.Build(client, subject, ctx)
+	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	newDriveAPI.Service = service
+	newDriveAPI.Subject = subject
+	newDriveAPI.Jobs = &sync.WaitGroup{}
 	return newDriveAPI
 }
 
@@ -26,18 +31,6 @@ type DriveAPI struct {
 	Service *drive.Service
 	Subject string
 	Jobs    *sync.WaitGroup
-}
-
-func (receiver *DriveAPI) Build(client *http.Client, subject string, ctx context.Context) *DriveAPI {
-	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
-	receiver.Service = service
-	receiver.Subject = subject
-	receiver.Jobs = &sync.WaitGroup{}
-	log.Printf("DriveAPI --> %v\n", receiver)
-	return receiver
 }
 
 type DriveFile struct {
@@ -355,45 +348,6 @@ func (receiver *DriveAPI) GetNestedFilesUsingRoutines(targetFolderId string) []*
 	return fileList
 }
 
-func (receiver *DriveAPI) PrintFolderAnalysis(targetFolderId string, csvFile *os.File) {
-	log.Printf("Pulling Children from folder [%s]\n", targetFolderId)
-	q := fmt.Sprintf("'%s' in parents", targetFolderId)
-	queryResponse := receiver.QueryFiles(q)
-	for _, file := range queryResponse {
-		log.Printf("Current file: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
-		if file.MimeType == "application/vnd.google-apps.folder" {
-			wg := &sync.WaitGroup{}
-			wg.Add(1)
-			go func(f *drive.File, csv *os.File) {
-				defer wg.Done()
-				receiver.PrintFolderAnalysis(f.Id, csv)
-			}(file, csvFile)
-			wg.Wait()
-		}
-		utils4go.AppendRowToCSVFile([]interface{}{file.Owners[0].EmailAddress, file.Id}, csvFile)
-	}
-}
-
-func (receiver *DriveAPI) PrintFolderAnalysisBLAZINGGG(targetFolderId string, csvFile *os.File) {
-	receiver.Jobs.Add(1)
-	defer receiver.Jobs.Done()
-	log.Printf("Pulling Children from folder [%s]\n", targetFolderId)
-	q := fmt.Sprintf("'%s' in parents", targetFolderId)
-	queryResponse := receiver.QueryFiles(q)
-	csvFileChan := make(chan *os.File)
-	csvFileChan <- csvFile
-	for _, file := range queryResponse {
-		log.Printf("Current file: %s, [%s] - %s", file.Name, file.Id, file.MimeType)
-		if file.MimeType == "application/vnd.google-apps.folder" {
-			go func(f *drive.File) {
-				receiver.PrintFolderAnalysis(f.Id, <-csvFileChan)
-			}(file)
-		}
-		log.Printf("Writing to: %s\n", csvFile.Name())
-		utils4go.AppendRowToCSVFile([]interface{}{file.Owners[0].EmailAddress, file.Id}, csvFile)
-	}
-}
-
 /*Sharing*/
 func (receiver *DriveAPI) GetFilePermissions(file *drive.File) string {
 	var permissionEmails string
@@ -444,21 +398,66 @@ func (receiver *DriveAPI) RemovePermissionByID(fileID, permissionID string, exec
 	return nil
 }
 
-func (receiver *DriveAPI) ShareFile(fileId, email, accountType, role string, notify bool) *drive.Permission {
-	response, err := receiver.Service.
-		Permissions.
-		Create(fileId, &drive.Permission{EmailAddress: email, Type: accountType, Role: strings.ToLower(role)}).
-		Fields("*").
-		SendNotificationEmail(notify).
-		Do()
+func (receiver *DriveAPI) ShareFile(fileId, email, accountType, role string, notify bool, doit bool) *drive.Permission {
 
-	if err != nil {
-		log.Printf("Sharing: %s, to: %s as [%s, %s] FAILED", fileId, email, accountType, role)
-		log.Fatalf(err.Error())
-	} else {
-		log.Printf("Sharing: %s, to: %s as [%s, %s] SUCCESS", fileId, email, accountType, role)
+	if doit {
+		response, err := receiver.Service.
+			Permissions.
+			Create(fileId, &drive.Permission{EmailAddress: email, Type: accountType, Role: strings.ToLower(role)}).
+			Fields("*").
+			SendNotificationEmail(notify).
+			Do()
+
+		if err != nil {
+			log.Printf("Sharing: %s, to: %s as [%s, %s] FAILED", fileId, email, accountType, role)
+			log.Fatalf(err.Error())
+		} else {
+			log.Printf("Sharing: %s, to: %s as [%s, %s] SUCCESS", fileId, email, accountType, role)
+		}
+		return response
 	}
-	return response
+
+	log.Printf("Sharing: %s, to: %s as [%s, %s] DID NOT EXECUTE", fileId, email, accountType, role)
+	return &drive.Permission{}
+
+}
+
+func (receiver *DriveAPI) PermissionShareHandler(calls []*drive.PermissionsCreateCall, doit bool) {
+	totalCalls := len(calls)
+	maxExecutes := 1
+	for {
+		if len(calls) < maxExecutes {
+			maxExecutes = len(calls)
+		}
+
+		wg := &sync.WaitGroup{}
+		wg.Add(maxExecutes)
+
+		for _, job := range calls[:maxExecutes] {
+			go func(worker *drive.PermissionsCreateCall) {
+				user := worker.Header().Get("user")
+				url := worker.Header().Get("url")
+				role := worker.Header().Get("role")
+				defer wg.Done()
+				if doit == true {
+					_, err := worker.Do()
+					if err != nil {
+						log.Println(err.Error())
+						log.Printf("FAILED --> Share File[%s] to %s<%s>", url, user, role)
+					}
+					log.Printf("SUCCESS --> Share File[%s] to %s<%s>", url, user, role)
+				} else {
+					log.Printf("DID NOT EXECUTE --> Share File[%s] to %s<%s>", url, user, role)
+				}
+			}(job)
+		}
+		wg.Wait()
+		calls = calls[maxExecutes:]
+		if len(calls) == 0 {
+			break
+		}
+	}
+	log.Printf("Total Calls executed: %d\n", totalCalls)
 }
 
 /*Workers*/
