@@ -87,10 +87,6 @@ func (receiver *DriveAPI) GetAbout() *drive.About {
 
 /*Files*/
 
-func (receiver *DriveAPI) Sleeper(seconds int64) {
-
-}
-
 func (receiver *DriveAPI) GetFileById(fileId string) *drive.File {
 	file, err := receiver.Service.Files.Get(fileId).Fields("*").Do()
 	if err != nil {
