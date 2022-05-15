@@ -2,7 +2,10 @@ package googledrive4go
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -15,7 +18,33 @@ import (
 	"time"
 )
 
-func BuildNewDriveAPI(client *http.Client, subject string, ctx context.Context) *DriveAPI {
+func BuildApiUsingOAuth2(subject string, scopes []string, clientSecret, authorizationToken []byte, ctx context.Context) *DriveAPI {
+	config, err := google.ConfigFromJSON(clientSecret, scopes...)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+	token := &oauth2.Token{}
+	err = json.Unmarshal(authorizationToken, token)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+	client := config.Client(context.Background(), token)
+	return BuildAPI(client, subject, ctx)
+}
+
+func BuildApiUsingImpersonation(subject string, scopes []string, serviceAccountKey []byte, ctx context.Context) *DriveAPI {
+	jwt, err := google.JWTConfigFromJSON(serviceAccountKey, scopes...)
+	if err != nil {
+		log.Println(err.Error())
+		panic(err)
+	}
+	jwt.Subject = subject
+	return BuildAPI(jwt.Client(ctx), subject, ctx)
+}
+
+func BuildAPI(client *http.Client, subject string, ctx context.Context) *DriveAPI {
 	newDriveAPI := &DriveAPI{}
 	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
