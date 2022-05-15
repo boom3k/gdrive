@@ -69,7 +69,6 @@ type DriveFile struct {
 }
 
 type FileTransfer struct {
-	Owner    string
 	NewOwner string
 	DriveAPI *DriveAPI
 	Files    []string
