@@ -1,4 +1,4 @@
-module github.com/boom3k/googledrive4go
+module github.com/boom3k/gdrive
 
 go 1.18
 
